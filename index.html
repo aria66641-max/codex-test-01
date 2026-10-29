@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="한국어 블로그를 위한 무료 규칙 기반 SEO 글쓰기 자료와 원고 점검 도구">
+<title>글결 | 블로그 SEO 작업실</title>
+<link rel="stylesheet" href="styles.css"><script src="app.js" defer></script>
+</head>
+<body>
+<header><a class="brand" href="index.html"><span class="logo">글</span> 글결 <small>블로그 SEO 작업실</small></a><span class="local">● 내 브라우저에서 실행</span></header>
+<main>
+<section class="hero"><span class="eyebrow">생각을 정리하고, 글의 방향을 잡으세요</span><h1>좋은 글의 시작,<br>키워드 하나에서.</h1><p>처음 쓰는 블로그도 차근차근. 글쓰기 자료를 만들고 원고를 점검하세요.</p></section>
+<aside class="notice"><strong>규칙 기반 초안 도구입니다.</strong> 미리 정한 문장과 규칙으로 자료를 조합하며, 실제 AI 본문을 생성하지 않습니다. 실시간 검색량·검색 순위는 측정하지 않으며, SEO 점수나 상위 노출을 보장하지 않습니다. 사실과 경험은 직접 확인해 작성하세요.</aside>
+<div class="workspace">
+<section class="panel input-panel"><div class="section-top"><span class="step">01</span><h2>글쓰기 준비</h2></div>
+<form id="generate-form"><label for="keyword">어떤 주제로 글을 쓸까요?</label><input id="keyword" maxlength="60" placeholder="예: 자취방 정리 방법" required autocomplete="off"><p class="hint">핵심 주제 하나를 60자 이내로 입력하세요.</p>
+<label for="platform">블로그 플랫폼</label><select id="platform"><option value="tistory">티스토리</option><option value="naver">네이버</option><option value="wordpress">워드프레스</option></select><p id="platform-guide" class="platform-guide"></p>
+<button class="primary" type="submit">글쓰기 자료 만들기 <span>↗</span></button><p id="form-error" class="error" role="alert"></p></form>
+<div class="tip"><strong>작은 글쓰기 팁</strong><p>독자가 알고 싶은 질문을 먼저 정해 보세요. 한 편의 글에 하나의 목적을 담으면 구성이 쉬워집니다.</p></div></section>
+<section class="results-area"><div class="section-top"><span class="step">02</span><h2>나만의 글쓰기 자료</h2><span class="badge">규칙 기반</span></div>
+<div id="empty" class="empty"><div class="empty-icon">✎</div><h3>첫 번째 글의 밑그림을 그려보세요</h3><p>키워드를 입력하면 제목부터 FAQ까지<br>글쓰기에 필요한 자료가 여기에 나타납니다.</p></div>
+<div id="results" hidden><div class="result-toolbar"><p id="result-label"></p><div><button type="button" id="copy-text">전체 텍스트 복사</button><button type="button" id="copy-html">티스토리 HTML 복사</button></div></div><p class="hint">아래 내용은 완성 원고가 아닙니다. 목차별 근거와 사례를 직접 추가하세요.</p><div id="cards"></div></div></section>
+</div>
+<section class="panel checker"><div class="section-top"><span class="step">03</span><h2>발행 전, 원고 점검</h2><span class="badge">참고용 체크리스트</span></div><p class="muted">제목·소제목·키워드·가독성을 간단한 규칙으로 확인합니다. 사실 여부와 검색 성과는 판단하지 않습니다.</p>
+<div class="check-grid"><div><label for="article-title">글 제목</label><input id="article-title" maxlength="200" placeholder="작성한 글의 제목을 입력하세요"><label for="article">본문 붙여넣기</label><textarea id="article" placeholder="일반 텍스트, Markdown 또는 HTML 원고를 붙여넣으세요.&#10;일반 텍스트 소제목은 별도 줄에 ## 소제목 형태로 표시해 주세요."></textarea><button type="button" class="primary" id="check">원고 점검하기</button></div><div id="check-results" class="check-results" aria-live="polite"><p class="muted">원고를 붙여넣고 점검하면<br>개선할 부분을 안내해 드립니다.</p></div></div></section>
+<footer>글결 · 무료 로컬 글쓰기 도구 <span>입력 내용은 서버에 전송하거나 저장하지 않습니다.</span></footer>
+</main><div id="toast" role="status" aria-live="polite"></div>
+<dialog id="copy-dialog"><h2>직접 복사하기</h2><p>자동 복사를 사용할 수 없습니다. 아래 내용을 선택해 복사하세요.</p><textarea id="manual-copy" aria-label="복사할 내용" readonly></textarea><button id="close-dialog" type="button">닫기</button></dialog>
+</body></html>
