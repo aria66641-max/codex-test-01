@@ -1,0 +1,14 @@
+const {chromium}=require('playwright');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');const core=require('../ai-core');
+(async()=>{
+ const browser=await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{})});const page=await browser.newPage();const errors=[];const requests=[];page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>requests.push(r.url()));
+ await page.route('https://seo-test.local/**',route=>{const name=new URL(route.request().url()).pathname.slice(1)||'index.html';if(!['index.html','styles.css','app.js','ai-core.js','ai-ui.js'].includes(name))return route.abort();return route.fulfill({body:fs.readFileSync(path.resolve(__dirname,'..',name)),contentType:name.endsWith('.js')?'application/javascript':name.endsWith('.css')?'text/css':'text/html'});});
+ await page.goto('https://seo-test.local/');await page.fill('#ai-keyword','보조금24 신청방법');await page.click('#ai-generate');assert.match(await page.locator('#ai-summary').innerText(),/데모 샘플/);assert.equal(await page.locator('.ai-card').count(),10);
+ assert.equal(requests.some(u=>u.includes('/api/')),false);
+ await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{value:{writeText:async t=>window.copied=t},configurable:true}));await page.click('#ai-copy-text');assert.match(await page.evaluate(()=>window.copied),/데모 샘플/);await page.click('#ai-copy-html');assert.match(await page.evaluate(()=>window.copied),/<h2>/);
+ await page.fill('#ai-keyword','<img src=x onerror=x>');await page.click('#ai-generate');assert.equal(await page.locator('#ai-cards img').count(),0);
+ await page.route('https://seo-test.local/api/write',async route=>{const options=route.request().postDataJSON();return route.fulfill({json:{mode:'live',draft:core.demo(options)}});});
+ await page.selectOption('#ai-mode','live');await page.click('#ai-generate');await page.waitForFunction(()=>document.getElementById('ai-summary').textContent.includes('AI 생성 초안'));assert.match(await page.locator('#ai-summary').innerText(),/AI 생성 초안/);
+ await page.route('https://seo-test.local/api/write',route=>route.fulfill({status:503,json:{error:'서버 비활성화'}}));await page.click('#ai-generate');await page.waitForFunction(()=>document.getElementById('ai-status').textContent.includes('비활성화'));assert.match(await page.locator('#ai-status').innerText(),/비활성화/);assert.equal(await page.locator('#ai-results').isVisible(),false);
+ for(const width of [375,768,1440]){await page.setViewportSize({width,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);}
+ assert.deepEqual(errors,[]);assert.equal(requests.some(u=>!u.startsWith('https://seo-test.local/')),false);await browser.close();console.log('PASS AI 화면: 데모 무요청, 모의 AI 성공/실패, 안전 렌더링, 텍스트/HTML 복사, 반응형');
+})().catch(e=>{console.error(e);process.exit(1)});

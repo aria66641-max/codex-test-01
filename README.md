@@ -1,3 +1,51 @@
+# 글결 · AI 글쓰기 개발 브랜치
+
+`feature/ai-writing`은 `seo-v2.1-stable`의 안정 커밋 `83bbdc501271ab7a7705bf492bfd15821df57fa2`에서 분리한 개발 버전입니다. 기존 규칙 기반 기능과 디자인을 유지하며 04 영역에 AI 본문 작성 UI를 추가했습니다. 저장소에 남아 있는 `blog-seo-tool-v2-1.zip`은 기존 안정 버전 파일이며 AI 기능을 포함하지 않습니다. 이 개발 기능은 브랜치 전체 파일로 실행하세요.
+
+## 가장 쉬운 실행: 무료 데모
+
+이 브랜치를 ZIP으로 내려받고 전체 압축을 푼 뒤 `index.html`을 여세요. `index.html`, `styles.css`, `app.js`, `ai-core.js`, `ai-ui.js`를 같은 폴더에 두어야 합니다. Node.js·서버·API 키 없이 기존 기능과 데모를 사용할 수 있습니다.
+
+페이지 아래 **AI 본문 작성 · 개발 버전**에서 키워드, 플랫폼, 글 길이, 톤을 선택하고 기본 데모 모드에서 생성하세요. 제목 3개, 서론 130~160자, H2 본문, FAQ 4개, 결론, 태그 8개를 표시합니다. 결과별 복사 및 전체 텍스트·티스토리 HTML 복사를 제공합니다. HTML의 제목은 편집기 제목란에 별도로 입력합니다.
+
+데모는 **실제 AI 결과가 아닌 고정 샘플**입니다. 주제별 사실이나 경험을 생성하지 않으며 길이에 맞춘 예시 문단을 제공합니다. 톤 선택은 실제 AI 요청에 전달되지만 데모의 문체 품질을 시뮬레이션하지 않습니다. 본문 글자 수는 각 H2 본문을 빈 줄 두 개로 연결한 문자열의 유니코드 문자 수입니다. 제목·서론·FAQ·결론·태그는 제외합니다. 선택 범위는 1800~2000, 1800~1900, 1900~2000자입니다.
+
+## 로컬 개발 서버
+
+Node.js 20 이상에서 `npm start`를 실행하고 `http://127.0.0.1:3000`을 여세요. 서버 자체는 Node 내장 기능만 사용하므로 패키지 설치가 필요 없습니다. 기본값은 실제 AI 요청 비활성화이며 API 키가 없어도 데모와 규칙 기반 기능이 동작합니다.
+
+실제 AI 연동 모듈은 `server/openai.cjs`에 있습니다. OpenAI Responses API의 `/v1/responses`, Structured Outputs JSON Schema, `store:false`를 사용합니다. 실제 키를 사용할 때는 서버 환경 변수 `OPENAI_API_KEY`, `OPENAI_MODEL`을 설정해야 하며, 별도로 `ENABLE_LIVE_AI=true`를 설정해야 요청할 수 있습니다. 이 개발 단계에서는 활성화하거나 유료 요청을 실행하지 않았습니다.
+
+`.env.example`은 빈 설정 예시입니다. 필요 시 로컬 `.env`로 복사해 서버에서만 사용하세요. Node.js 20.6 이상에서는 `node --env-file=.env server/index.cjs`로 로드할 수 있습니다. `.env`는 Git에서 제외됩니다. API 키를 HTML·브라우저 JS·커밋·화면에 입력하지 마세요. `OPENAI_MODEL`에는 계정에서 사용할 수 있는 Responses 및 Structured Outputs 지원 모델 ID를 설정합니다.
+
+서버는 127.0.0.1에만 바인딩하고 정적 파일을 허용 목록으로 제공합니다. 서버 소스와 환경 파일은 제공하지 않습니다. 실제 API 엔드포인트는 동일 출처 JSON 요청만 받고 요청 크기·동시 실행을 제한합니다. 인터넷 공개 서비스용 인증·사용자별 할당량은 구현하지 않았습니다. 공개 배포를 위한 서비스가 아니라 로컬 개발 서버입니다.
+
+실제 AI 모드는 키워드·플랫폼·길이·톤을 서버와 OpenAI에 전달합니다. 로컬 영구 저장은 하지 않습니다. 모델 응답의 구조·서론 길이·본문 범위를 서버와 브라우저에서 검사하며, 실패·거절·미완료·시간 초과를 안내합니다. 자동 재시도는 하지 않습니다. 모델에 허위 사실·경험·출처를 만들지 말고 미확인 내용을 ‘확인 필요’로 표시하도록 지시하지만, 실제 사실 검증이나 검색은 하지 않습니다. 발행 전 검토가 필요합니다.
+
+API 설계 참고: [Responses API](https://developers.openai.com/api/reference/resources/responses/methods/create), [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses).
+
+## 자동 테스트
+
+- `npm test`: 기존 9개 검색 의도, v2.1 회귀 사례, 새 데모 조합 108건, 요청 계약·출력 검증, 서버 설정 차단, 입력·동일 출처 검사, 비공개 파일 차단 및 모의 성공 경로
+- `npm install` 후 `npx playwright install chromium`, `npm run test:browser`: 기존 및 AI 화면 테스트. 앱 실행에는 Playwright가 필요 없습니다.
+- 이 개발 환경에서는 브라우저 정책이 file URL을 차단하여 `TEST_VIRTUAL_ORIGIN=1 CHROMIUM_PATH=/usr/bin/chromium npm run test:browser`로 로컬 파일을 요청 가로채기 방식으로 제공해 검증했습니다. 유료 API 및 외부 네트워크 호출 없이 모의 응답만 사용했습니다.
+- 위 테스트 모두 통과했습니다. 데모 무요청, AI 모의 성공·실패, HTML 이스케이프, 복사, 375/768/1440px 가로 넘침도 확인했습니다. 실제 API 키로 수행하는 통합 테스트 및 실제 모바일 기기 검증은 미수행입니다.
+
+## 주요 추가 파일
+
+- `ai-core.js`: 브라우저/서버 공유 데이터 계약, 샘플 및 길이 검증, 복사 포맷
+- `ai-ui.js`: 독립 AI 작성 폼·결과 렌더링 및 복사
+- `server/index.cjs`: 로컬 정적 서버와 API 라우트
+- `server/openai.cjs`: 서버 전용 Responses API 어댑터
+- `tests/ai.cjs`, `tests/ai-browser.cjs`: 모의 API 및 화면 회귀 테스트
+- `.env.example`, `.gitignore`, `package.json`: 서버 설정과 실행·테스트 명령
+
+main·안정 브랜치는 수정하지 않으며 자동 배포·병합을 수행하지 않습니다.
+
+---
+
+아래는 기존 규칙 기반 v2.1 도구의 안내입니다. AI 개발 영역은 위 설명을 따르세요.
+
 # 글결 · 한국어 블로그 SEO 작업실
 
 HTML, CSS, JavaScript로 만든 무료 규칙 기반 글쓰기 도구입니다. 서버, API 키, 빌드, 외부 라이브러리 없이 사용합니다.
