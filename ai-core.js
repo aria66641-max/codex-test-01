@@ -11,13 +11,45 @@ function input(value){
 const str={type:'string'};
 const obj=properties=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 const array=(items,minItems,maxItems)=>({type:'array',items,minItems,maxItems});
-const schema=obj({titles:array(str,3,3),intro:str,sections:array(obj({heading:str,body:str}),3,8),faq:array(obj({question:str,answer:str}),4,4),conclusion:str,tags:array(str,8,8)});
+const schema=obj({titles:array(str,3,3),intro:{type:'string',description:'공백 포함 130~160자 한국어 서론. 앞뒤 공백 제외, NFC 정규화, 줄바꿈 LF 기준.'},sections:array(obj({heading:str,body:str}),3,8),faq:array(obj({question:str,answer:str}),4,4),conclusion:str,tags:array(str,8,8)});
 const bodyText=d=>d.sections.map(s=>s.body).join('\n\n');
-function validate(d,options){
- const v=input(options); const [min,max]=ranges[v.length];
- const text=s=>typeof s==='string'&&s.trim()&&len(s)<=10000;
- if(!d||!Array.isArray(d.titles)||d.titles.length!==3||!d.titles.every(text)||new Set(d.titles).size!==3||!text(d.intro)||len(d.intro)<130||len(d.intro)>160||!Array.isArray(d.sections)||d.sections.length<3||d.sections.length>8||!d.sections.every(s=>s&&text(s.heading)&&text(s.body))||!Array.isArray(d.faq)||d.faq.length!==4||!d.faq.every(f=>f&&text(f.question)&&text(f.answer))||!text(d.conclusion)||!Array.isArray(d.tags)||d.tags.length!==8||!d.tags.every(text)||new Set(d.tags.map(t=>t.trim())).size!==8)throw Error('생성 결과의 구조 또는 서론 길이가 기준에 맞지 않습니다.');
- const n=len(bodyText(d));if(n<min||n>max)throw Error(`본문 ${n}자: 요청한 ${min}~${max}자 범위를 벗어났습니다. 자동 재요청은 하지 않습니다.`);
+class ValidationError extends Error {
+ constructor(issues){super('AI 초안을 확인해 주세요: '+issues.map(i=>i.message).join(' / ')+' 자동 재요청은 하지 않습니다.');this.name='ValidationError';this.code='INVALID_DRAFT';this.issues=issues;}
+}
+// Preserve meaningful spaces; normalize only equivalent Unicode/newlines and outer whitespace.
+const clean=s=>typeof s==='string'?s.normalize('NFC').replace(/\r\n?/g,'\n').trim():s;
+function validate(source,options){
+ const v=input(options), [min,max]=ranges[v.length], issues=[];
+ const issue=(path,message)=>issues.push({path,message});
+ if(!source||typeof source!=='object'||Array.isArray(source))throw new ValidationError([{path:'draft',message:'결과는 JSON 객체여야 합니다.'}]);
+ const d={...source};
+ const text=(value,path,label)=>{
+  const result=clean(value);
+  if(typeof result!=='string'||!result)issue(path,`${label}: 비어 있지 않은 문자열이 필요합니다.`);
+  else if(len(result)>10000)issue(path,`${label}: 10000자 제한을 초과했습니다.`);
+  return result;
+ };
+ function list(key,label,count,mapper){
+  if(!Array.isArray(d[key])){issue(key,`${label}: 배열이 필요합니다.`);return null;}
+  if(d[key].length<count[0]||d[key].length>count[1])issue(key,`${label}: 현재 ${d[key].length}개, ${count[0]===count[1]?count[0]:count.join('~')}개가 필요합니다.`);
+  return d[key].map(mapper);
+ }
+ d.titles=list('titles','제목 후보',[3,3],(t,i)=>text(t,`titles[${i}]`,`제목 ${i+1}`));
+ if(d.titles&&new Set(d.titles).size!==d.titles.length)issue('titles','제목 후보: 중복된 제목이 있습니다.');
+ d.intro=text(d.intro,'intro','서론');
+ if(typeof d.intro==='string'&&(len(d.intro)<130||len(d.intro)>160))issue('intro',`서론: 현재 ${len(d.intro)}자, 공백 포함 130~160자가 필요합니다.`);
+ d.sections=list('sections','H2 본문',[3,8],(section,i)=>({
+  heading:text(section?.heading,`sections[${i}].heading`,`H2 ${i+1} 소제목`),
+  body:text(section?.body,`sections[${i}].body`,`H2 ${i+1} 본문`)
+ }));
+ if(d.sections?.every(s=>typeof s.body==='string')){
+  const n=len(bodyText(d));if(n<min||n>max)issue('sections',`본문: 현재 ${n}자, 요청한 ${min}~${max}자가 필요합니다. H2 본문과 섹션 사이 빈 줄만 계산하며 서론·FAQ·결론은 제외합니다.`);
+ }
+ d.faq=list('faq','FAQ',[4,4],(f,i)=>({question:text(f?.question,`faq[${i}].question`,`FAQ ${i+1} 질문`),answer:text(f?.answer,`faq[${i}].answer`,`FAQ ${i+1} 답변`)}));
+ d.conclusion=text(d.conclusion,'conclusion','결론');
+ d.tags=list('tags','태그',[8,8],(t,i)=>text(t,`tags[${i}]`,`태그 ${i+1}`));
+ if(d.tags&&new Set(d.tags).size!==d.tags.length)issue('tags','태그: 중복을 제거한 서로 다른 태그 8개가 필요합니다.');
+ if(issues.length)throw new ValidationError(issues);
  return d;
 }
 function demo(options){
@@ -46,5 +78,5 @@ function demo(options){
 const escape=s=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function plain(d){return `[발행 전 사실 확인이 필요한 초안]\n${d.titles.join('\n')}\n\n${d.intro}\n\n${d.sections.map(s=>'## '+s.heading+'\n'+s.body).join('\n\n')}\n\nFAQ\n${d.faq.map(f=>'Q. '+f.question+'\nA. '+f.answer).join('\n\n')}\n\n결론\n${d.conclusion}\n\n태그: ${d.tags.join(', ')}`;}
 function html(d){return '<!-- 제목은 편집기 제목란에 별도 입력. 발행 전 사실 확인 필요. -->\n<p>'+escape(d.intro)+'</p>\n'+d.sections.map(s=>'<h2>'+escape(s.heading)+'</h2>\n<p>'+escape(s.body).replace(/\n/g,'<br>')+'</p>').join('\n')+'\n<h2>FAQ</h2>'+d.faq.map(f=>'<h3>'+escape(f.question)+'</h3><p>'+escape(f.answer)+'</p>').join('\n')+'<h2>결론</h2><p>'+escape(d.conclusion)+'</p>';}
-return {input,schema,validate,demo,bodyText,len,plain,html};
+return {input,schema,ValidationError,validate,demo,bodyText,len,plain,html};
 });

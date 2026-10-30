@@ -31,3 +31,38 @@ test('로컬 HTTP: 기본 API 차단, 비공개 파일 차단, 입력/출처 검
  const live=createServer({env:{ENABLE_LIVE_AI:'true'},generate:async v=>core.demo(v)});await new Promise(r=>live.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${live.address().port}`;
  try{const r=await fetch(base+'/api/write',{method:'POST',headers:{'Content-Type':'application/json',Origin:base},body:JSON.stringify(options)});assert.equal(r.status,200);assert.equal((await r.json()).mode,'live');}finally{await new Promise(r=>live.close(r));}
 });
+test('허용 가능한 공백·CRLF·분해형 한글 정규화, 길이 경계와 항목별 진단',()=>{
+ const original=core.demo(options), padded=structuredClone(original);
+ padded.intro=' \r\n'+padded.intro.normalize('NFD')+'\r\n ';
+ padded.sections=padded.sections.map(s=>({heading:' '+s.heading+' ',body:'\r\n'+s.body.normalize('NFD')+'\r\n'}));
+ assert.deepEqual(core.validate(padded,options),original);
+ const draft=()=>structuredClone(original);
+ for(const n of [130,160]){const d=draft();d.intro='가'.repeat(n);assert.equal(core.len(core.validate(d,options).intro),n);}
+ for(const n of [129,161]){const d=draft();d.intro='가'.repeat(n);assert.throws(()=>core.validate(d,options),e=>e instanceof core.ValidationError&&e.message.includes(`현재 ${n}자`));}
+ for(const n of [1799,1800,2000,2001]){
+  const d=draft();d.sections=[{heading:'하나',body:'가'.repeat(n-6)},{heading:'둘',body:'나'},{heading:'셋',body:'다'}];
+  if(n>=1800&&n<=2000)assert.equal(core.len(core.bodyText(core.validate(d,options))),n);
+  else assert.throws(()=>core.validate(d,options),new RegExp(`현재 ${n}자`));
+ }
+ const bad=draft();bad.titles=['중복','중복'];bad.intro='짧음';bad.sections[0].body=' ';bad.faq[1].answer=null;bad.conclusion='';bad.tags=['태그'];
+ assert.throws(()=>core.validate(bad,options),e=>['제목 후보: 현재 2개','중복된 제목','서론: 현재 2자','H2 1 본문','FAQ 2 답변','결론','태그: 현재 1개'].every(s=>e.message.includes(s)));
+ const tags=draft();tags.tags[1]=' '+tags.tags[0]+' ';assert.throws(()=>core.validate(tags,options),/중복을 제거/);
+ for(const value of [null,[],{}, {sections:null}])assert.throws(()=>core.validate(value,options),core.ValidationError);
+});
+test('모의 응답 분할 텍스트·집계 텍스트, 검증 실패 시 단일 호출과 민감 정보 미노출',async()=>{
+ const env={ENABLE_LIVE_AI:'true',OPENAI_API_KEY:'private-key-canary',OPENAI_MODEL:'test-model'};
+ const d=core.demo(options), text=JSON.stringify(d);let calls=0;
+ const invoke=payload=>generate(options,{env,fetchImpl:async()=>{calls++;return {ok:true,json:async()=>payload};}});
+ assert.deepEqual(await invoke({status:'completed',output:[{type:'reasoning'},{content:[{type:'output_text',text:text.slice(0,100)},{type:'output_text',text:text.slice(100)}]}],output_text:'do not concatenate'}),d);
+ assert.deepEqual(await invoke({status:'completed',output_text:text}),d);
+ const invalid={...d,intro:'민감한 개인정보가 들어 있는 짧은 문장'};const before=calls;
+ await assert.rejects(invoke({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(invalid)}]}]}),e=>e.message.includes('서론: 현재')&&!e.message.includes(invalid.intro)&&!e.message.includes(env.OPENAI_API_KEY));
+ assert.equal(calls,before+1);
+ await assert.rejects(invoke({status:'completed',output:{}}),/JSON 텍스트가 없습니다/);
+});
+test('서버는 검증 이슈만 반환하고 임의 예외의 개인정보를 숨김',async()=>{
+ let fail='validation';let calls=0;
+ const server=createServer({env:{ENABLE_LIVE_AI:'true'},generate:async()=>{calls++;if(fail==='unknown')throw Error('private-key-and-personal-info');const d=core.demo(options);d.intro='짧음';return d;}});
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}`;
+ try{for(const mode of ['validation','unknown']){fail=mode;const r=await fetch(base+'/api/write',{method:'POST',headers:{'Content-Type':'application/json',Origin:base},body:JSON.stringify(options)});assert.equal(r.status,502);const result=await r.json();if(mode==='validation'){assert.equal(result.code,'INVALID_DRAFT');assert.ok(result.issues.some(i=>i.path==='intro'));assert.match(result.error,/서론: 현재 2자/);}else assert.doesNotMatch(JSON.stringify(result),/private-key-and-personal-info/);}assert.equal(calls,2);}finally{await new Promise(r=>server.close(r));}
+});
