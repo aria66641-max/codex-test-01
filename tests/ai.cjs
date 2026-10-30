@@ -66,3 +66,18 @@ test('서버는 검증 이슈만 반환하고 임의 예외의 개인정보를 �
  await new Promise(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}`;
  try{for(const mode of ['validation','unknown']){fail=mode;const r=await fetch(base+'/api/write',{method:'POST',headers:{'Content-Type':'application/json',Origin:base},body:JSON.stringify(options)});assert.equal(r.status,502);const result=await r.json();if(mode==='validation'){assert.equal(result.code,'INVALID_DRAFT');assert.ok(result.issues.some(i=>i.path==='intro'));assert.match(result.error,/서론: 현재 2자/);}else assert.doesNotMatch(JSON.stringify(result),/private-key-and-personal-info/);}assert.equal(calls,2);}finally{await new Promise(r=>server.close(r));}
 });
+test('분량 지시·출력 토큰 여유, 124자/1148자 실패 및 정상 분량, 호출 1회',async()=>{
+ const adapter=require('../server/openai.cjs');const env={ENABLE_LIVE_AI:'true',OPENAI_API_KEY:'test-placeholder',OPENAI_MODEL:'test-model'};
+ for(const length of ['1800-2000','1800-1900','1900-2000']){
+  const prompt=adapter.buildInstructions({...options,length});const [min,max]=length.split('-');
+  assert.ok(prompt.includes(`공백 포함 ${min}~${max}자`));assert.match(prompt,/서론 130~160자/);assert.match(prompt,/NFC/);assert.match(prompt,/LF 두 개/);assert.match(prompt,/중복 금지/);assert.match(prompt,/확인 필요/);
+ }
+ let calls=0;const run=async(d,status='completed')=>generate(options,{env,fetchImpl:async(url,request)=>{
+  calls++;const b=JSON.parse(request.body);assert.equal(b.max_output_tokens,12000);assert.equal(b.text.format.strict,true);assert.match(b.instructions,/목표 1900자/);assert.match(b.instructions,/379, 379, 378, 378, 378/);
+  return {ok:true,json:async()=>({status,incomplete_details:status==='incomplete'?{reason:'max_output_tokens'}:undefined,output:[{content:[{type:'output_text',text:JSON.stringify(d)}]}]})};
+ }});
+ const valid=core.demo(options);assert.deepEqual(await run(valid),valid);assert.equal(calls,1);
+ const short=structuredClone(valid);short.intro='가'.repeat(124);short.sections=[{heading:'준비',body:'가'.repeat(1142)},{heading:'절차',body:'나'},{heading:'주의',body:'다'}];
+ await assert.rejects(run(short),e=>e.message.includes('서론: 현재 124자')&&e.message.includes('본문: 현재 1148자'));assert.equal(calls,2);
+ await assert.rejects(run(valid,'incomplete'),/토큰 한도에 도달/);assert.equal(calls,3);
+});

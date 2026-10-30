@@ -12,6 +12,7 @@ const str={type:'string'};
 const obj=properties=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 const array=(items,minItems,maxItems)=>({type:'array',items,minItems,maxItems});
 const schema=obj({titles:array(str,3,3),intro:{type:'string',description:'공백 포함 130~160자 한국어 서론. 앞뒤 공백 제외, NFC 정규화, 줄바꿈 LF 기준.'},sections:array(obj({heading:str,body:str}),3,8),faq:array(obj({question:str,answer:str}),4,4),conclusion:str,tags:array(str,8,8)});
+function writingLimits(options){const v=input(options);return {bodyMin:ranges[v.length][0],bodyMax:ranges[v.length][1],introMin:130,introMax:160};}
 const bodyText=d=>d.sections.map(s=>s.body).join('\n\n');
 class ValidationError extends Error {
  constructor(issues){super('AI 초안을 확인해 주세요: '+issues.map(i=>i.message).join(' / ')+' 자동 재요청은 하지 않습니다.');this.name='ValidationError';this.code='INVALID_DRAFT';this.issues=issues;}
@@ -78,5 +79,5 @@ function demo(options){
 const escape=s=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function plain(d){return `[발행 전 사실 확인이 필요한 초안]\n${d.titles.join('\n')}\n\n${d.intro}\n\n${d.sections.map(s=>'## '+s.heading+'\n'+s.body).join('\n\n')}\n\nFAQ\n${d.faq.map(f=>'Q. '+f.question+'\nA. '+f.answer).join('\n\n')}\n\n결론\n${d.conclusion}\n\n태그: ${d.tags.join(', ')}`;}
 function html(d){return '<!-- 제목은 편집기 제목란에 별도 입력. 발행 전 사실 확인 필요. -->\n<p>'+escape(d.intro)+'</p>\n'+d.sections.map(s=>'<h2>'+escape(s.heading)+'</h2>\n<p>'+escape(s.body).replace(/\n/g,'<br>')+'</p>').join('\n')+'\n<h2>FAQ</h2>'+d.faq.map(f=>'<h3>'+escape(f.question)+'</h3><p>'+escape(f.answer)+'</p>').join('\n')+'<h2>결론</h2><p>'+escape(d.conclusion)+'</p>';}
-return {input,schema,ValidationError,validate,demo,bodyText,len,plain,html};
+return {input,schema,writingLimits,ValidationError,validate,demo,bodyText,len,plain,html};
 });
