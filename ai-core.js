@@ -58,8 +58,8 @@ function validate(source,options,{allowLengthMismatch=false,allowEditorialMismat
 }
 function publicationIssues(d){
  const fields=[...(d.titles||[]).map((s,i)=>[`titles[${i}]`,s]),['intro',d.intro],...(d.sections||[]).flatMap((s,i)=>[[`sections[${i}].heading`,s.heading],[`sections[${i}].body`,s.body]]),...(d.faq||[]).flatMap((f,i)=>[[`faq[${i}].question`,f.question],[`faq[${i}].answer`,f.answer]]),['conclusion',d.conclusion],...(d.tags||[]).map((t,i)=>[`tags[${i}]`,t])];
- const meta=/(?:H2\s*[·:：]|(?:행동|판단\s*기준|준비\s*사항|예외|작성\s*가이드|(?:검증|확인)\s*필요)\s*[:：]|복사|<(?:h[1-6]|button)[\s>]|^\s*#{1,6}\s)/im;
- return fields.filter(([,s])=>typeof s==='string'&&meta.test(s)).map(([path])=>({path,message:`${path}: 작성용 표시가 남았습니다. 내용을 삭제만 하지 말고 독자가 읽는 자연스러운 문장으로 다시 작성하세요.`}));
+ const meta=/(?:H2\s*[·:：]|(?:행동|판단\s*기준|준비\s*사항|예외|작성\s*가이드|(?:검증|확인)\s*필요)\s*[:：]|(?:^|\n)\s*복사\s*(?=$|\n)|<(?:h[1-6]|button)[\s>]|^\s*#{1,6}\s)/im;
+ return fields.filter(([,s])=>typeof s==='string'&&meta.test(s)).map(([path,s])=>({path,message:`${path}: 작성용 표시(${s.match(meta)[0].trim()})가 남았습니다. 내용을 삭제만 하지 말고 독자가 읽는 자연스러운 문장으로 다시 작성하세요.`}));
 }
 function assertPublishable(d){const issues=publicationIssues(d);if(issues.length)throw new ValidationError(issues);}
 function contentSignals(d){

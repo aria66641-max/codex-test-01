@@ -8,7 +8,7 @@ test('발행 텍스트·HTML은 선택 제목과 원고만 출력, 검증 메모
 });
 test('메타 표현이 남은 원고는 삭제하지 않고 검증 실패·편집용 원본 보존, 수동 재작성 후 재검증',async()=>{
  const d=core.demo(values),base=d.sections[0].body;
- for(const marker of ['H2 · ','행동: ','판단 기준: ','준비사항: ','예외: ','작성 가이드: ','검증 필요: ','확인 필요: ','복사']){
+ for(const marker of ['H2 · ','행동: ','판단 기준: ','준비사항: ','예외: ','작성 가이드: ','검증 필요: ','확인 필요: ','복사\n']){
   const bad=structuredClone(d);bad.sections[0].body=marker+base;
   assert.throws(()=>core.validate(bad,values),/작성용 표시/);assert.throws(()=>core.plain(bad),/작성용 표시/);assert.throws(()=>core.html(bad),/작성용 표시/);
   assert.equal(bad.sections[0].body,marker+base);
@@ -24,3 +24,5 @@ test('gpt-5-mini만 low 추론을 지정하고 다른 모델은 기존 요청을
  let calls=0;await api.generate(values,{env:{ENABLE_LIVE_AI:'true',OPENAI_API_KEY:'test-placeholder',OPENAI_MODEL:model},fetchImpl:async(url,request)=>{calls++;const body=JSON.parse(request.body);assert.equal(body.max_output_tokens,12000);if(model.startsWith('gpt-5-mini'))assert.deepEqual(body.reasoning,{effort:'low'});else assert.equal(body.reasoning,undefined);return {ok:true,status:200,json:async()=>({status:'completed',output_text:JSON.stringify(core.demo(values))})};}});assert.equal(calls,1);
  }
 });
+
+test('일반 문장의 복사 단어는 차단하지 않음',()=>{const d=core.demo(values);d.sections[0].body='접수번호를 복사해 별도로 보관하면 문의할 때 활용할 수 있습니다. '+d.sections[0].body;assert.equal(core.publicationIssues(d).length,0);});

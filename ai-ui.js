@@ -8,13 +8,13 @@
  function lock(value){published=!value;for(const id of ['ai-copy-text','ai-copy-html','ai-copy-title','ai-copy-body'])$(id).disabled=value;for(const b of document.querySelectorAll('.ai-card button'))b.disabled=value;}
  function editor(d){
   $('ai-editor-fields').replaceChildren();
-  const add=(label,value,key)=>{const wrap=document.createElement('label');wrap.textContent=label;const t=document.createElement('textarea');t.value=value;t.dataset.key=key;t.rows=3;t.style.minHeight='80px';t.oninput=()=>{lock(true);$('ai-quality').textContent='수정 중입니다. 분량·구조 점검 후 복사를 사용할 수 있습니다.';};wrap.append(t);$('ai-editor-fields').append(wrap);};
+  const add=(label,value,key)=>{const wrap=document.createElement('label');wrap.textContent=label;const t=document.createElement('textarea');t.value=value;t.dataset.key=key;t.rows=3;t.id='ai-field-'+key.replace(/\./g,'-');t.style.minHeight='80px';t.oninput=()=>{lock(true);$('ai-quality').textContent='수정 중입니다. 분량·구조 점검 후 복사를 사용할 수 있습니다.';};wrap.append(t);$('ai-editor-fields').append(wrap);};
   d.titles.forEach((v,i)=>add(`제목 ${i+1}`,v,`titles.${i}`));add('서론',d.intro,'intro');
   d.sections.forEach((s,i)=>{add(`H2 ${i+1}`,s.heading,`sections.${i}.heading`);add(`H2 ${i+1} 본문`,s.body,`sections.${i}.body`);});
   d.faq.forEach((f,i)=>{add(`FAQ ${i+1} 질문`,f.question,`faq.${i}.question`);add(`FAQ ${i+1} 답변`,f.answer,`faq.${i}.answer`);});
   add('공감형 결론',d.conclusion,'conclusion');d.tags.forEach((t,i)=>add(`태그 ${i+1}`,t,`tags.${i}`));
  }
- function render(d,valid=true){
+ function render(d,valid=true){$('ai-edit-errors').replaceChildren();
   current=d;$('ai-results').hidden=false;$('ai-cards').replaceChildren();
   const blocked=core.publicationIssues(d).length>0;valid=valid&&!blocked;lock(!valid);
   const note=document.createElement('strong');note.textContent='작성자 검증 메모 · 원고에 포함되지 않음';
@@ -41,9 +41,18 @@
   editor(d);$('ai-editor').open=!valid;$('ai-quality').textContent=core.quality(d,options).join('\n');
  }
  $('ai-apply').onclick=()=>{
-  if(!current)return;const edited=structuredClone(current);
+  if(!current)return;const edited=structuredClone(current);$('ai-edit-errors').replaceChildren();for(const t of $('ai-editor-fields').querySelectorAll('textarea')){t.removeAttribute('aria-invalid');t.removeAttribute('aria-describedby');}for(const n of $('ai-editor-fields').querySelectorAll('.field-error'))n.remove();
   for(const t of $('ai-editor-fields').querySelectorAll('textarea')){const parts=t.dataset.key.split('.');let target=edited;for(const p of parts.slice(0,-1))target=target[p];target[parts.at(-1)]=t.value;}
-  try{const d=core.validate(edited,options);render(d);status('분량·구조 점검 통과. 내용의 사실 여부와 출처는 직접 검토하세요.');}catch(e){lock(true);status(e.message);$('ai-quality').textContent=e.message;}
+  try{const d=core.validate(edited,options);render(d);status('분량·구조 점검 통과. 내용의 사실 여부와 출처는 직접 검토하세요.');}catch(e){lock(true);status(e.message);$('ai-quality').textContent=e.message;
+   const panel=$('ai-edit-errors');const title=document.createElement('p');title.textContent='점검 실패: 아래 항목을 선택하면 해당 입력칸으로 이동합니다.';panel.append(title);
+   for(const issue of e.issues||[{path:'',message:e.message}]){
+    const key=issue.path.replace(/\[(\d+)\]/g,'.$1');
+    const t=[...$('ai-editor-fields').querySelectorAll('textarea')].find(t=>t.dataset.key===key)||[...$('ai-editor-fields').querySelectorAll('textarea')].find(t=>t.dataset.key.startsWith(key+'.'));
+    const line=document.createElement('p');const b=document.createElement('button');b.type='button';b.textContent=issue.message;b.onclick=()=>{if(t){t.focus();t.scrollIntoView({block:'center'});}};line.append(b);panel.append(line);
+    if(t){t.setAttribute('aria-invalid','true');const inline=document.createElement('span');inline.className='field-error error';inline.id=t.id+'-error';inline.textContent=issue.message;t.setAttribute('aria-describedby',inline.id);t.parentElement.append(inline);}
+   }
+   $('ai-editor').open=true;panel.focus();panel.scrollIntoView({block:'center'});
+  }
  };
  const REQUEST_TIMEOUT_MS=215000;
  let pendingId=null,running=false;
