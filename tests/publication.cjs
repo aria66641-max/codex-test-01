@@ -18,3 +18,9 @@ test('메타 표현이 남은 원고는 삭제하지 않고 검증 실패·편�
  bad.sections[0].body=base;core.validate(bad,values);
 });
 test('구조화 출력에 작성자 메모를 분리하고 자연스러운 재작성 지시 포함',()=>{const prompt=api.buildInstructions(values);assert.ok(core.schema.required.includes('verificationNotes'));assert.match(prompt,/라벨만 지워 조각 문장을 남기지/);assert.match(prompt,/완결된 연결 문장/);assert.match(prompt,/verificationNotes/);});
+
+test('gpt-5-mini만 low 추론을 지정하고 다른 모델은 기존 요청을 유지',async()=>{
+ for(const model of ['gpt-5-mini','gpt-5-mini-2025-08-07','test-model']){
+ let calls=0;await api.generate(values,{env:{ENABLE_LIVE_AI:'true',OPENAI_API_KEY:'test-placeholder',OPENAI_MODEL:model},fetchImpl:async(url,request)=>{calls++;const body=JSON.parse(request.body);assert.equal(body.max_output_tokens,12000);if(model.startsWith('gpt-5-mini'))assert.deepEqual(body.reasoning,{effort:'low'});else assert.equal(body.reasoning,undefined);return {ok:true,status:200,json:async()=>({status:'completed',output_text:JSON.stringify(core.demo(values))})};}});assert.equal(calls,1);
+ }
+});

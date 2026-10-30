@@ -38,6 +38,7 @@ async function generate(options,{env=process.env,fetchImpl=fetch,signal,timeoutM
  const response=await fetchImpl('https://api.openai.com/v1/responses',{
   method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${env.OPENAI_API_KEY}`},signal:providerSignal,
   body:JSON.stringify({model:env.OPENAI_MODEL,store:false,max_output_tokens:MAX_OUTPUT_TOKENS,
+   ...(/^gpt-5-mini(?:-\d{4}-\d{2}-\d{2})?$/.test(env.OPENAI_MODEL)?{reasoning:{effort:'low'}}:{}),
    instructions:buildInstructions(values),
    input:JSON.stringify(values),text:{format:{type:'json_schema',name:'korean_blog_draft',strict:true,schema:core.schema}}})
  });
