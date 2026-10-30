@@ -16,6 +16,15 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
  await page.locator('textarea[data-key="intro"]').fill('가'.repeat(145));await page.click('#ai-apply');assert.equal(await page.locator('#ai-copy-title').isEnabled(),true);
  await page.click('#ai-copy-title');assert.ok((await page.evaluate(()=>window.copied)).length>0);await page.click('#ai-copy-body');assert.match(await page.evaluate(()=>window.copied),/## /);
  assert.match(await page.locator('#ai-quality').innerText(),/서론 145자/);
+ await page.route('https://seo-test.local/api/write',async route=>{await new Promise(r=>setTimeout(r,100));const d=core.demo(route.request().postDataJSON());assert.match(route.request().headers()['x-request-id'],/^[a-f0-9-]{36}$/);return route.fulfill({json:{mode:'live',state:'completed',draft:d}});});
+ await page.click('#ai-generate');assert.equal(await page.locator('#ai-generate').isDisabled(),true);assert.match(await page.locator('#ai-generate').innerText(),/진행 중/);await page.waitForFunction(()=>!document.getElementById('ai-generate').disabled);
+ await page.evaluate(()=>{window.savedFetch=window.fetch;window.fetch=(url,options)=>url==='/api/write'?Promise.reject(new DOMException('mock','TimeoutError')):window.savedFetch(url,options);});
+ await page.click('#ai-generate');await page.waitForFunction(()=>document.getElementById('ai-status').textContent.includes('215초'));
+ assert.equal(await page.locator('#ai-request-status').isVisible(),true);const unresolvedId=await page.evaluate(()=>sessionStorage.getItem('seo-pending-request'));await page.click('#ai-generate');assert.equal(await page.evaluate(()=>sessionStorage.getItem('seo-pending-request')),unresolvedId);assert.match(await page.locator('#ai-status').innerText(),/무료 상태 확인/);
+ await page.route('https://seo-test.local/api/requests/**',route=>{const options={keyword:'복구 테스트',platform:'tistory',length:'1800-2000',tone:'친근한 안내'};return route.fulfill({json:{state:'completed',mode:'live',options,draft:core.demo(options)}});});
+ const postsBefore=requests.filter(u=>u.endsWith('/api/write')).length;
+ await page.click('#ai-request-status');await page.waitForFunction(()=>document.getElementById('ai-status').textContent.includes('복구했습니다'));
+ assert.equal(requests.filter(u=>u.endsWith('/api/write')).length,postsBefore);assert.equal(await page.locator('#ai-request-status').isVisible(),false);
  for(const width of [375,768,1440]){await page.setViewportSize({width,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);}
  assert.deepEqual(errors,[]);assert.equal(requests.some(u=>!u.startsWith('https://seo-test.local/')),false);await browser.close();console.log('PASS AI 화면: 데모 무요청, 모의 AI 성공/실패, 안전 렌더링, 텍스트/HTML 복사, 반응형');
 })().catch(e=>{console.error(e);process.exit(1)});

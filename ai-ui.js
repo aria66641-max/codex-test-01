@@ -27,23 +27,56 @@
   for(const t of $('ai-editor-fields').querySelectorAll('textarea')){const parts=t.dataset.key.split('.');let target=edited;for(const p of parts.slice(0,-1))target=target[p];target[parts.at(-1)]=t.value;}
   try{const d=core.validate(edited,options);render(d);status('분량·구조 점검 통과. 내용의 사실 여부와 출처는 직접 검토하세요.');}catch(e){lock(true);status(e.message);$('ai-quality').textContent=e.message;}
  };
+ const REQUEST_TIMEOUT_MS=215000;
+ let pendingId=null,running=false;
+ try{pendingId=sessionStorage.getItem('seo-pending-request');}catch{}
+ function pending(id){if(!id)$('ai-new-request').hidden=true;pendingId=id;try{if(id)sessionStorage.setItem('seo-pending-request',id);else sessionStorage.removeItem('seo-pending-request');}catch{}$('ai-request-status').hidden=!id;}
+ pending(pendingId);
+ if(pendingId)status('이전 요청이 있습니다. 새 생성 전에 상태를 확인하세요.');
+ function accept(result){
+  if(result.state==='running'){$('ai-new-request').hidden=true;status(`요청 처리 중 · 단계 ${result.stage||'대기'} · 상태 확인은 새 API 요청을 만들지 않습니다.`);return;}
+  if(result.state==='uncertain'||result.state==='unknown'){$('ai-new-request').hidden=false;
+   status((result.error||'원격 처리 결과를 확정할 수 없습니다.')+' 새 생성은 추가 비용이 발생할 수 있습니다.');return;
+  }
+  if(result.options)options=core.input(result.options);
+  pending(null);
+  if(result.draft){
+   try{const d=core.validate(result.draft,options);render(d);status('초안을 복구했습니다. 발행 전 사실 확인이 필요합니다.');}
+   catch(e){try{render(core.validate(result.draft,options,{allowLengthMismatch:true}),false);}catch{}status(result.error||e.message);}
+  }else status(result.error||'요청이 종료되었습니다.');
+ }
+ $('ai-new-request').onclick=()=>{if(window.confirm('원격 요청이 이미 처리되어 비용이 발생했을 수 있습니다. 새 생성은 추가 비용을 유발할 수 있습니다. 그래도 새 생성을 허용할까요?')){pending(null);status('새 생성이 허용되었습니다. 생성 버튼을 누를 때 새 유료 요청이 한 번 발생합니다.');}};
+ $('ai-request-status').onclick=async()=>{
+  if(!pendingId)return;const b=$('ai-request-status');b.disabled=true;
+  try{mode='live';const response=await fetch('/api/requests/'+encodeURIComponent(pendingId),{signal:AbortSignal.timeout(10000)});accept(await response.json());}
+  catch{status('요청 상태 조회에 실패했습니다. 생성 요청은 다시 보내지 않았습니다. 서버 실행 상태를 확인하세요.');}finally{b.disabled=false;}
+ };
  $('ai-form').addEventListener('submit',async event=>{
-  event.preventDefault();current=null;$('ai-results').hidden=true;lock(true);const button=$('ai-generate');button.disabled=true;status('초안을 준비하고 있습니다…');
+  event.preventDefault();if(running)return;
+  if($('ai-mode').value==='live'&&pendingId){status('이전 요청이 남아 있습니다. 먼저 무료 상태 확인을 사용하세요.');return;}
+  current=null;$('ai-results').hidden=true;lock(true);const button=$('ai-generate');button.disabled=true;running=true;
+  const began=Date.now();status('초안을 준비하고 있습니다…');const progress=setInterval(()=>status(`AI 생성 진행 중 · ${Math.floor((Date.now()-began)/1000)}초 경과 · 최대 약 3분 35초 · 자동 재요청 없음`),1000);
+  const original=button.textContent;button.textContent='생성 진행 중…';
   try{
    options=core.input({keyword:$('ai-keyword').value,platform:$('ai-platform').value,length:$('ai-length').value,tone:$('ai-tone').value});mode=$('ai-mode').value;
    let data;
    if(mode==='demo')data=core.demo(options);
    else{
     if(location.protocol==='file:')throw Error('실제 AI 모드는 START.bat으로 실행한 로컬 서버에서 사용할 수 있습니다.');
-    const response=await fetch('/api/write',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(options),signal:AbortSignal.timeout(125000)});
-    const result=await response.json();if(!response.ok){
+    const id=crypto.randomUUID();pending(id);
+    const response=await fetch('/api/write',{method:'POST',headers:{'Content-Type':'application/json','X-Request-ID':id},body:JSON.stringify(options),signal:AbortSignal.timeout(REQUEST_TIMEOUT_MS)});
+    const result=await response.json();
+    if(result.state==='running'||result.state==='uncertain'){accept(result);return;}
+    pending(null);
+    if(!response.ok){
      if(result.draft){try{render(core.validate(result.draft,options,{allowLengthMismatch:true}),false);}catch{}}
      throw Error(result.error||'생성에 실패했습니다.');
     }
     data=core.validate(result.draft,options);
    }
    render(data);status(mode==='demo'?'샘플을 표시했습니다. 실제 AI 생성 품질을 보여주는 결과는 아닙니다.':'AI 초안을 생성했습니다. 발행 전 점검과 사실 확인을 진행하세요.');
-  }catch(e){status(e.name==='TimeoutError'?'응답 시간이 초과되었습니다. 서버 작업이 끝날 때까지 기다려 주세요. 자동 재요청은 없습니다.':e.message||'초안을 만들지 못했습니다.');}finally{button.disabled=false;}
+  }catch(e){status(e.name==='TimeoutError'?'브라우저 대기 215초 제한을 초과했습니다. 서버 처리가 계속될 수 있으므로 무료 상태 확인을 먼저 사용하세요. 자동 재요청은 없습니다.':e.name==='TypeError'?'브라우저와 로컬 서버의 통신이 끊겼습니다. 원격 처리 여부는 확정할 수 없습니다. 무료 상태 확인을 사용하세요.':e.message||'초안을 만들지 못했습니다.');}
+  finally{clearInterval(progress);running=false;button.disabled=false;button.textContent=original;}
  });
  $('ai-copy-title').onclick=()=>published&&copy(selectedTitle());
  $('ai-copy-body').onclick=()=>published&&copy(current.intro+'\n\n'+current.sections.map(s=>'## '+s.heading+'\n'+s.body).join('\n\n')+'\n\nFAQ\n'+current.faq.map(f=>'Q. '+f.question+'\nA. '+f.answer).join('\n\n')+'\n\n결론\n'+current.conclusion);

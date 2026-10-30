@@ -1,5 +1,6 @@
 'use strict';
 const core=require('../ai-core');
+const {LIMITS,deadline}=require('./timing.cjs');
 const {plan}=require('./content-plan.cjs');
 const MAX_OUTPUT_TOKENS=12000;
 class AIResponseError extends Error { constructor(message){super(message);this.name='AIResponseError';} }
@@ -26,18 +27,22 @@ function buildInstructions(values){
 [중복 금지] 같은 내용을 바꾸어 반복하거나 의미 없는 연결 문장으로 분량을 채우지 않는다. 부족하면 누락된 독자 질문, 준비사항의 이유, 상황별 주의사항을 보완한다. 임의 문구를 덧붙여 기계적으로 글자 수를 채우지 않는다.
 [출력 구조] 서로 다른 제목 3개, intro 문자열, sections의 heading/body 문자열, faq의 question/answer 4쌍, 비어 있지 않은 conclusion, 중복 없는 관련 tags 8개를 제공한다. 요청 플랫폼과 톤을 반영하며 SEO 성과를 보장하지 않는다. 응답을 마치기 전에 핵심 질문에 먼저 답했는지, H2별 새 정보가 있는지, 추상적 문장과 의미 중복이 남았는지, 출처 상태와 분량이 맞는지 내부 점검한다. 본문과 FAQ에 같은 답을 재사용하지 않고 공감형 결론은 다음 행동으로 마무리한다.`;
 }
-async function generate(options,{env=process.env,fetchImpl=fetch}={}){
+async function generate(options,{env=process.env,fetchImpl=fetch,signal,timeoutMs=LIMITS.providerMs,onEvent=()=>{}}={}){
  const values=core.input(options);
  if(env.ENABLE_LIVE_AI!=='true')throw Error('실제 AI 요청은 서버에서 비활성화되어 있습니다. 데모 모드를 사용하세요.');
  if(!env.OPENAI_API_KEY||!env.OPENAI_MODEL)throw Error('서버의 API 키와 모델 설정이 필요합니다.');
+ return deadline(async providerSignal=>{
+ onEvent('provider_start');
  const response=await fetchImpl('https://api.openai.com/v1/responses',{
-  method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${env.OPENAI_API_KEY}`},signal:AbortSignal.timeout(120000),
+  method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${env.OPENAI_API_KEY}`},signal:providerSignal,
   body:JSON.stringify({model:env.OPENAI_MODEL,store:false,max_output_tokens:MAX_OUTPUT_TOKENS,
    instructions:buildInstructions(values),
    input:JSON.stringify(values),text:{format:{type:'json_schema',name:'korean_blog_draft',strict:true,schema:core.schema}}})
  });
+ onEvent('provider_headers',response.status);
  if(!response.ok)throw new AIResponseError(response.status===401?'API 인증에 실패했습니다. 서버의 키 설정을 확인하세요.':response.status===429?'API 사용 한도 또는 요청 한도에 도달했습니다. 자동 재요청은 하지 않습니다.':'AI 제공자 요청에 실패했습니다. 잠시 후 수동으로 시도하세요.');
  const payload=await response.json();
+ onEvent('provider_body');
  if(payload.status!=='completed'){
   if(payload.incomplete_details?.reason==='max_output_tokens')throw new AIResponseError('AI 출력 토큰 한도에 도달해 응답이 잘렸습니다. 자동 재요청은 하지 않습니다.');
   throw new AIResponseError('AI 응답이 완료되지 않았습니다. 자동 재요청은 하지 않습니다.');
@@ -50,12 +55,13 @@ async function generate(options,{env=process.env,fetchImpl=fetch}={}){
  const text=parts.length?parts.join(''):typeof payload.output_text==='string'?payload.output_text:'';
  if(!text.trim())throw Error('AI 응답에 본문 JSON 텍스트가 없습니다. 자동 재요청은 하지 않습니다.');
  let data;try{data=JSON.parse(text);}catch{throw Error('AI 응답의 JSON 형식이 올바르지 않습니다. 자동 재요청은 하지 않습니다.');}
- try{return core.validate(data,values);}catch(e){
+ try{onEvent('validation');const draft=core.validate(data,values);onEvent('validated');return draft;}catch(e){
   if(e instanceof core.ValidationError){
    // Only structurally valid length failures can be recovered for local editing.
    try{e.draft=core.validate(data,values,{allowLengthMismatch:true});}catch{}
   }
   throw e;
  }
+ },{ms:timeoutMs,stage:'provider',signal});
 }
 module.exports={generate,buildInstructions,MAX_OUTPUT_TOKENS,AIResponseError};
