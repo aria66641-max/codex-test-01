@@ -10,6 +10,12 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
  await page.selectOption('#ai-mode','live');await page.click('#ai-generate');await page.waitForFunction(()=>document.getElementById('ai-summary').textContent.includes('AI 생성 초안'));assert.match(await page.locator('#ai-summary').innerText(),/AI 생성 초안/);
  await page.route('https://seo-test.local/api/write',route=>{const d=core.demo(route.request().postDataJSON());d.intro='짧음';return route.fulfill({json:{mode:'live',draft:d}});});await page.click('#ai-generate');await page.waitForFunction(()=>document.getElementById('ai-status').textContent.includes('서론: 현재 2자'));assert.match(await page.locator('#ai-status').innerText(),/130~160자/);
  await page.route('https://seo-test.local/api/write',route=>route.fulfill({status:503,json:{error:'서버 비활성화'}}));await page.click('#ai-generate');await page.waitForFunction(()=>document.getElementById('ai-status').textContent.includes('비활성화'));assert.match(await page.locator('#ai-status').innerText(),/비활성화/);assert.equal(await page.locator('#ai-results').isVisible(),false);
+ await page.route('https://seo-test.local/api/write',route=>{const d=core.demo(route.request().postDataJSON());d.intro='가'.repeat(124);return route.fulfill({status:502,json:{error:'서론: 현재 124자, 130~160자 필요',draft:d}});});
+ await page.click('#ai-generate');await page.waitForFunction(()=>document.getElementById('ai-status').textContent.includes('124자'));
+ assert.equal(await page.locator('#ai-results').isVisible(),true);assert.equal(await page.locator('#ai-copy-title').isDisabled(),true);
+ await page.locator('textarea[data-key="intro"]').fill('가'.repeat(145));await page.click('#ai-apply');assert.equal(await page.locator('#ai-copy-title').isEnabled(),true);
+ await page.click('#ai-copy-title');assert.ok((await page.evaluate(()=>window.copied)).length>0);await page.click('#ai-copy-body');assert.match(await page.evaluate(()=>window.copied),/## /);
+ assert.match(await page.locator('#ai-quality').innerText(),/서론 145자/);
  for(const width of [375,768,1440]){await page.setViewportSize({width,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);}
  assert.deepEqual(errors,[]);assert.equal(requests.some(u=>!u.startsWith('https://seo-test.local/')),false);await browser.close();console.log('PASS AI 화면: 데모 무요청, 모의 AI 성공/실패, 안전 렌더링, 텍스트/HTML 복사, 반응형');
 })().catch(e=>{console.error(e);process.exit(1)});

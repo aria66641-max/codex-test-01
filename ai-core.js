@@ -19,7 +19,7 @@ class ValidationError extends Error {
 }
 // Preserve meaningful spaces; normalize only equivalent Unicode/newlines and outer whitespace.
 const clean=s=>typeof s==='string'?s.normalize('NFC').replace(/\r\n?/g,'\n').trim():s;
-function validate(source,options){
+function validate(source,options,{allowLengthMismatch=false}={}){
  const v=input(options), [min,max]=ranges[v.length], issues=[];
  const issue=(path,message)=>issues.push({path,message});
  if(!source||typeof source!=='object'||Array.isArray(source))throw new ValidationError([{path:'draft',message:'결과는 JSON 객체여야 합니다.'}]);
@@ -38,12 +38,12 @@ function validate(source,options){
  d.titles=list('titles','제목 후보',[3,3],(t,i)=>text(t,`titles[${i}]`,`제목 ${i+1}`));
  if(d.titles&&new Set(d.titles).size!==d.titles.length)issue('titles','제목 후보: 중복된 제목이 있습니다.');
  d.intro=text(d.intro,'intro','서론');
- if(typeof d.intro==='string'&&(len(d.intro)<130||len(d.intro)>160))issue('intro',`서론: 현재 ${len(d.intro)}자, 공백 포함 130~160자가 필요합니다.`);
+ if(!allowLengthMismatch&&typeof d.intro==='string'&&(len(d.intro)<130||len(d.intro)>160))issue('intro',`서론: 현재 ${len(d.intro)}자, 공백 포함 130~160자가 필요합니다.`);
  d.sections=list('sections','H2 본문',[3,8],(section,i)=>({
   heading:text(section?.heading,`sections[${i}].heading`,`H2 ${i+1} 소제목`),
   body:text(section?.body,`sections[${i}].body`,`H2 ${i+1} 본문`)
  }));
- if(d.sections?.every(s=>typeof s.body==='string')){
+ if(!allowLengthMismatch&&d.sections?.every(s=>typeof s.body==='string')){
   const n=len(bodyText(d));if(n<min||n>max)issue('sections',`본문: 현재 ${n}자, 요청한 ${min}~${max}자가 필요합니다. H2 본문과 섹션 사이 빈 줄만 계산하며 서론·FAQ·결론은 제외합니다.`);
  }
  d.faq=list('faq','FAQ',[4,4],(f,i)=>({question:text(f?.question,`faq[${i}].question`,`FAQ ${i+1} 질문`),answer:text(f?.answer,`faq[${i}].answer`,`FAQ ${i+1} 답변`)}));
@@ -52,6 +52,19 @@ function validate(source,options){
  if(d.tags&&new Set(d.tags).size!==d.tags.length)issue('tags','태그: 중복을 제거한 서로 다른 태그 8개가 필요합니다.');
  if(issues.length)throw new ValidationError(issues);
  return d;
+}
+function quality(d,options){
+ const k=input(options).keyword;const body=bodyText(d);const sentences=body.split(/[.!?。！？\n]+/).map(s=>s.trim()).filter(s=>len(s)>15);
+ const duplicates=sentences.length-new Set(sentences).size;
+ return [
+  `서론 ${len(d.intro)}자 · 본문 ${len(body)}자 (공백 포함)`,
+  `제목 ${d.titles.length}개 · H2 ${d.sections.length}개 · FAQ ${d.faq.length}개 · 태그 ${d.tags.length}개`,
+  d.titles.some(t=>t.includes(k))?'제목 키워드 포함 확인':'살펴보기: 제목에 핵심 키워드가 없습니다.',
+  body.includes(k)?'본문 키워드 포함 확인':'살펴보기: 본문에 핵심 키워드가 없습니다.',
+  duplicates?`살펴보기: 정확히 반복된 문장 ${duplicates}개`:'정확히 반복된 문장 없음 (의미 중복은 직접 확인)',
+  /확인 필요/.test(plain(d))?'발행 전 ‘확인 필요’ 항목의 근거를 보완하세요.':'사실·출처·경험은 별도로 직접 검토하세요.',
+  'SEO 편집 참고용입니다. 사실 여부·의미 품질·검색 순위는 판정하지 않습니다.'
+ ];
 }
 function demo(options){
  const v=input(options), subject=len(v.keyword)>10?Array.from(v.keyword).slice(0,9).join('')+'…':v.keyword;
@@ -79,5 +92,5 @@ function demo(options){
 const escape=s=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function plain(d){return `[발행 전 사실 확인이 필요한 초안]\n${d.titles.join('\n')}\n\n${d.intro}\n\n${d.sections.map(s=>'## '+s.heading+'\n'+s.body).join('\n\n')}\n\nFAQ\n${d.faq.map(f=>'Q. '+f.question+'\nA. '+f.answer).join('\n\n')}\n\n결론\n${d.conclusion}\n\n태그: ${d.tags.join(', ')}`;}
 function html(d){return '<!-- 제목은 편집기 제목란에 별도 입력. 발행 전 사실 확인 필요. -->\n<p>'+escape(d.intro)+'</p>\n'+d.sections.map(s=>'<h2>'+escape(s.heading)+'</h2>\n<p>'+escape(s.body).replace(/\n/g,'<br>')+'</p>').join('\n')+'\n<h2>FAQ</h2>'+d.faq.map(f=>'<h3>'+escape(f.question)+'</h3><p>'+escape(f.answer)+'</p>').join('\n')+'<h2>결론</h2><p>'+escape(d.conclusion)+'</p>';}
-return {input,schema,writingLimits,ValidationError,validate,demo,bodyText,len,plain,html};
+return {input,schema,writingLimits,ValidationError,validate,quality,demo,bodyText,len,plain,html};
 });

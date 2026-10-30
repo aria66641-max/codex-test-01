@@ -1,1 +1,16 @@
-{"name":"korean-seo-writing-tool","version":"2.2.0-dev","private":true,"scripts":{"start":"node server/index.cjs","test":"node tests/intents.cjs && node tests/v21.cjs && node --test tests/ai.cjs","test:browser":"node tests/smoke.cjs && node tests/ai-browser.cjs"},"engines":{"node":">=20"},"devDependencies":{"playwright":"^1.58.0"}}
+{
+  "name": "korean-seo-writing-tool",
+  "version": "2.2.0",
+  "private": true,
+  "scripts": {
+    "start": "node launcher.cjs",
+    "test": "node tests/intents.cjs && node tests/v21.cjs && node --test tests/ai.cjs tests/final.cjs",
+    "test:browser": "node tests/smoke.cjs && node tests/ai-browser.cjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "playwright": "^1.58.0"
+  }
+}
