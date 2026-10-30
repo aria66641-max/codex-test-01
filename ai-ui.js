@@ -18,7 +18,7 @@
   current=d;$('ai-results').hidden=false;$('ai-cards').replaceChildren();lock(!valid);
   const items=[['제목 후보 3개',d.titles.join('\n')],[`서론 · ${core.len(d.intro)}자`,d.intro],...d.sections.map(s=>['H2 · '+s.heading,s.body]),['FAQ',d.faq.map(f=>'Q. '+f.question+'\nA. '+f.answer).join('\n\n')],['결론',d.conclusion],['태그 8개',d.tags.join(', ')]];
   for(const [title,text]of items){const card=document.createElement('article');card.className='card ai-card';const head=document.createElement('div');head.className='card-head';const h=document.createElement('h3');h.textContent=title;const b=document.createElement('button');b.type='button';b.textContent='복사';b.disabled=!valid;b.onclick=()=>published&&copy(text);const body=document.createElement('div');body.className='content';body.textContent=text;head.append(h,b);card.append(head,body);$('ai-cards').append(card);}
-  $('ai-summary').textContent=`${mode==='demo'?'데모 샘플 · 실제 AI 생성 아님':'AI 생성 초안 · 사실 검증되지 않음'} | ${options.tone} | 본문 ${core.len(core.bodyText(d))}자`;
+  $('ai-summary').textContent=`${mode==='demo'?'데모 샘플 · 실제 AI 생성 아님':'AI 생성 초안 · 공식 출처 미조회 · 최신 정보 검증 필요'} | ${options.tone} | 본문 ${core.len(core.bodyText(d))}자`;
   $('ai-title-select').replaceChildren(...d.titles.map((t,i)=>{const o=document.createElement('option');o.value=i;o.textContent=t;return o;}));
   editor(d);$('ai-editor').open=!valid;$('ai-quality').textContent=core.quality(d,options).join('\n');
  }

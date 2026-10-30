@@ -1,10 +1,10 @@
 {
   "name": "korean-seo-writing-tool",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "private": true,
   "scripts": {
     "start": "node launcher.cjs",
-    "test": "node tests/intents.cjs && node tests/v21.cjs && node --test tests/ai.cjs tests/final.cjs",
+    "test": "node tests/intents.cjs && node tests/v21.cjs && node --test tests/ai.cjs tests/final.cjs tests/quality.cjs",
     "test:browser": "node tests/smoke.cjs && node tests/ai-browser.cjs"
   },
   "engines": {

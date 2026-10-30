@@ -53,17 +53,31 @@ function validate(source,options,{allowLengthMismatch=false}={}){
  if(issues.length)throw new ValidationError(issues);
  return d;
 }
+function contentSignals(d){
+ const text=bodyText(d);const sentences=text.split(/[.!?。！？\n]+/).map(s=>s.trim()).filter(Boolean);
+ const key=s=>s.normalize('NFC').replace(/[\p{P}\p{Z}\s]/gu,'').toLowerCase();
+ const normalized=sentences.filter(s=>len(s)>15).map(key);const duplicates=normalized.length-new Set(normalized).size;
+ const grams=s=>new Set(Array.from({length:Math.max(0,s.length-2)},(_,i)=>s.slice(i,i+3)));
+ let similarPairs=0;
+ for(let i=0;i<normalized.length;i++)for(let j=i+1;j<normalized.length;j++){
+  const x=normalized[i],y=normalized[j];if(x===y||Math.min(x.length,y.length)<30)continue;
+  const a=grams(x),b=grams(y);let both=0;for(const g of a)if(b.has(g))both++;
+  if(both/(a.size+b.size-both)>=0.75)similarPairs++;
+ }
+ return {duplicates,similarPairs,longSentences:sentences.filter(s=>len(s)>100).length,
+  genericHeadings:d.sections.filter(s=>/^(기본\s*개념|핵심\s*정보|주의사항|마무리|결론|개요)$/.test(s.heading.trim())).length,
+  sensitiveClaims:sentences.filter(s=>/\d+\s*(만원|원|월|일|%|세)|지원금액|신청기한|신청 기한|공식.{0,8}확인/.test(s)&&!/(검증|확인)\s*필요/.test(s)).length};
+}
 function quality(d,options){
- const k=input(options).keyword;const body=bodyText(d);const sentences=body.split(/[.!?。！？\n]+/).map(s=>s.trim()).filter(s=>len(s)>15);
- const duplicates=sentences.length-new Set(sentences).size;
+ const k=input(options).keyword,body=bodyText(d),signals=contentSignals(d);
  return [
   `서론 ${len(d.intro)}자 · 본문 ${len(body)}자 (공백 포함)`,
   `제목 ${d.titles.length}개 · H2 ${d.sections.length}개 · FAQ ${d.faq.length}개 · 태그 ${d.tags.length}개`,
   d.titles.some(t=>t.includes(k))?'제목 키워드 포함 확인':'살펴보기: 제목에 핵심 키워드가 없습니다.',
   body.includes(k)?'본문 키워드 포함 확인':'살펴보기: 본문에 핵심 키워드가 없습니다.',
-  duplicates?`살펴보기: 정확히 반복된 문장 ${duplicates}개`:'정확히 반복된 문장 없음 (의미 중복은 직접 확인)',
-  /확인 필요/.test(plain(d))?'발행 전 ‘확인 필요’ 항목의 근거를 보완하세요.':'사실·출처·경험은 별도로 직접 검토하세요.',
-  'SEO 편집 참고용입니다. 사실 여부·의미 품질·검색 순위는 판정하지 않습니다.'
+  `문장 반복 ${signals.duplicates}개 · 유사 문장 후보 ${signals.similarPairs}쌍 · 100자 초과 문장 ${signals.longSentences}개 · 추상적 H2 후보 ${signals.genericHeadings}개. 편집 참고용 탐지이며 의미 분석 결과가 아닙니다.`,
+  `최신 정보 검토 후보 ${signals.sensitiveClaims}개 · 공식 출처 미조회: 정책·금액·기한은 검증 필요. ‘확인 필요’ 또는 ‘검증 필요’ 항목을 발행 전에 보완하세요.`,
+  'SEO 편집 참고용입니다. 사실 여부·의미 품질·검색 순위는 판정하지 않습니다. 자연스러운 키워드 사용과 독자에게 필요한 답을 직접 검토하세요.'
  ];
 }
 function demo(options){
@@ -92,5 +106,5 @@ function demo(options){
 const escape=s=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function plain(d){return `[발행 전 사실 확인이 필요한 초안]\n${d.titles.join('\n')}\n\n${d.intro}\n\n${d.sections.map(s=>'## '+s.heading+'\n'+s.body).join('\n\n')}\n\nFAQ\n${d.faq.map(f=>'Q. '+f.question+'\nA. '+f.answer).join('\n\n')}\n\n결론\n${d.conclusion}\n\n태그: ${d.tags.join(', ')}`;}
 function html(d){return '<!-- 제목은 편집기 제목란에 별도 입력. 발행 전 사실 확인 필요. -->\n<p>'+escape(d.intro)+'</p>\n'+d.sections.map(s=>'<h2>'+escape(s.heading)+'</h2>\n<p>'+escape(s.body).replace(/\n/g,'<br>')+'</p>').join('\n')+'\n<h2>FAQ</h2>'+d.faq.map(f=>'<h3>'+escape(f.question)+'</h3><p>'+escape(f.answer)+'</p>').join('\n')+'<h2>결론</h2><p>'+escape(d.conclusion)+'</p>';}
-return {input,schema,writingLimits,ValidationError,validate,quality,demo,bodyText,len,plain,html};
+return {input,schema,writingLimits,ValidationError,validate,quality,contentSignals,demo,bodyText,len,plain,html};
 });
