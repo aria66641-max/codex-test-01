@@ -15,10 +15,28 @@
   add('공감형 결론',d.conclusion,'conclusion');d.tags.forEach((t,i)=>add(`태그 ${i+1}`,t,`tags.${i}`));
  }
  function render(d,valid=true){
-  current=d;$('ai-results').hidden=false;$('ai-cards').replaceChildren();lock(!valid);
-  const items=[['제목 후보 3개',d.titles.join('\n')],[`서론 · ${core.len(d.intro)}자`,d.intro],...d.sections.map(s=>['H2 · '+s.heading,s.body]),['FAQ',d.faq.map(f=>'Q. '+f.question+'\nA. '+f.answer).join('\n\n')],['결론',d.conclusion],['태그 8개',d.tags.join(', ')]];
-  for(const [title,text]of items){const card=document.createElement('article');card.className='card ai-card';const head=document.createElement('div');head.className='card-head';const h=document.createElement('h3');h.textContent=title;const b=document.createElement('button');b.type='button';b.textContent='복사';b.disabled=!valid;b.onclick=()=>published&&copy(text);const body=document.createElement('div');body.className='content';body.textContent=text;head.append(h,b);card.append(head,body);$('ai-cards').append(card);}
-  $('ai-summary').textContent=`${mode==='demo'?'데모 샘플 · 실제 AI 생성 아님':'AI 생성 초안 · 공식 출처 미조회 · 최신 정보 검증 필요'} | ${options.tone} | 본문 ${core.len(core.bodyText(d))}자`;
+  current=d;$('ai-results').hidden=false;$('ai-cards').replaceChildren();
+  const blocked=core.publicationIssues(d).length>0;valid=valid&&!blocked;lock(!valid);
+  const note=document.createElement('strong');note.textContent='작성자 검증 메모 · 원고에 포함되지 않음';
+  const warning=document.createElement('p');warning.textContent='발행 전 검증 필요: 공식 출처는 조회하지 않았습니다. 미확인 사실을 검증하고 독자에게 필요한 불확실성 안내는 원고에 남기세요.';
+  $('ai-verification').replaceChildren(note,warning);
+  for(const value of d.verificationNotes||[]){const p=document.createElement('p');p.textContent=value;$('ai-verification').append(p);}
+  if(blocked){const p=document.createElement('p');p.textContent='작성용 표시가 발견되어 발행 미리보기와 복사를 잠갔습니다. 아래 편집기에서 완결된 문장으로 고친 뒤 다시 점검하세요.';$('ai-cards').append(p);}
+  else{
+   const items=[['제목 후보 3개',d.titles.join('\n'),'titles'],['서론',d.intro,'intro'],...d.sections.map(s=>[s.heading,s.body,'section']),['자주 묻는 질문',d.faq.map(f=>f.question+'\n'+f.answer).join('\n\n'),'faq'],['결론',d.conclusion,'conclusion'],['태그 8개',d.tags.join(', '),'tags']];
+   for(const [title,text,type]of items){
+    const card=document.createElement('article');card.className='card ai-card';const head=document.createElement('div');head.className='card-head';
+    const h=document.createElement(type==='section'||type==='faq'?'h2':'h3');h.textContent=title;
+    const button=()=>{const b=document.createElement('button');b.type='button';b.textContent='복사';b.disabled=!valid;return b;};
+    const b=button();b.onclick=()=>published&&copy(text);head.append(h,b);card.append(head);
+    const body=document.createElement('div');body.className='content';
+    if(type==='faq')for(const f of d.faq){const q=document.createElement('h3');q.textContent=f.question;const a=document.createElement('p');a.textContent=f.answer;body.append(q,a);}
+    else if(type==='titles'||type==='tags')for(const value of type==='titles'?d.titles:d.tags){const row=document.createElement('div');const t=document.createElement('span');t.textContent=value;const c=button();c.setAttribute('aria-label',(type==='titles'?'제목 후보':'태그')+' 복사');c.onclick=()=>published&&copy(value);row.append(t,c);body.append(row);}
+    else for(const paragraph of text.split(/\n\s*\n/)){const p=document.createElement('p');p.textContent=paragraph;body.append(p);}
+    card.append(body);$('ai-cards').append(card);
+   }
+  }
+  $('ai-summary').textContent=`${mode==='demo'?'데모 샘플 · 실제 AI 생성 아님':'AI 생성 초안 · 공식 출처 미조회 · 최신 정보 검증 필요'} | ${options.tone} | 서론 ${core.len(d.intro)}자 · 본문 ${core.len(core.bodyText(d))}자`;
   $('ai-title-select').replaceChildren(...d.titles.map((t,i)=>{const o=document.createElement('option');o.value=i;o.textContent=t;return o;}));
   editor(d);$('ai-editor').open=!valid;$('ai-quality').textContent=core.quality(d,options).join('\n');
  }
@@ -42,7 +60,7 @@
   pending(null);
   if(result.draft){
    try{const d=core.validate(result.draft,options);render(d);status('초안을 복구했습니다. 발행 전 사실 확인이 필요합니다.');}
-   catch(e){try{render(core.validate(result.draft,options,{allowLengthMismatch:true}),false);}catch{}status(result.error||e.message);}
+   catch(e){try{render(core.validate(result.draft,options,{allowLengthMismatch:true,allowEditorialMismatch:true}),false);}catch{}status(result.error||e.message);}
   }else status(result.error||'요청이 종료되었습니다.');
  }
  $('ai-new-request').onclick=()=>{if(window.confirm('원격 요청이 이미 처리되어 비용이 발생했을 수 있습니다. 새 생성은 추가 비용을 유발할 수 있습니다. 그래도 새 생성을 허용할까요?')){pending(null);status('새 생성이 허용되었습니다. 생성 버튼을 누를 때 새 유료 요청이 한 번 발생합니다.');}};
@@ -69,7 +87,7 @@
     if(result.state==='running'||result.state==='uncertain'){accept(result);return;}
     pending(null);
     if(!response.ok){
-     if(result.draft){try{render(core.validate(result.draft,options,{allowLengthMismatch:true}),false);}catch{}}
+     if(result.draft){try{render(core.validate(result.draft,options,{allowLengthMismatch:true,allowEditorialMismatch:true}),false);}catch{}}
      throw Error(result.error||'생성에 실패했습니다.');
     }
     data=core.validate(result.draft,options);
@@ -79,7 +97,7 @@
   finally{clearInterval(progress);running=false;button.disabled=false;button.textContent=original;}
  });
  $('ai-copy-title').onclick=()=>published&&copy(selectedTitle());
- $('ai-copy-body').onclick=()=>published&&copy(current.intro+'\n\n'+current.sections.map(s=>'## '+s.heading+'\n'+s.body).join('\n\n')+'\n\nFAQ\n'+current.faq.map(f=>'Q. '+f.question+'\nA. '+f.answer).join('\n\n')+'\n\n결론\n'+current.conclusion);
- $('ai-copy-text').onclick=()=>published&&copy(($('ai-summary').textContent)+'\n'+core.plain(current));
- $('ai-copy-html').onclick=()=>{if(!published)return;const h=document.createElement('h1');h.textContent=selectedTitle();copy('<!-- '+$('ai-summary').textContent.replace(/--/g,'')+' -->\n'+h.outerHTML+'\n'+core.html(current));};
+ $('ai-copy-body').onclick=()=>published&&copy(core.bodyPlain(current));
+ $('ai-copy-text').onclick=()=>published&&copy(core.plain(current,selectedTitle()));
+ $('ai-copy-html').onclick=()=>{if(!published)return;const h=document.createElement('h1');h.textContent=selectedTitle();copy(h.outerHTML+'\n'+core.html(current));};
 })();

@@ -2,7 +2,7 @@ const {test}=require('node:test');const assert=require('node:assert/strict');con
 const options={keyword:'보조금24 신청방법',platform:'tistory',length:'1800-2000',tone:'친근한 안내'};
 test('데모: 모든 글 길이·플랫폼·톤·키워드 경계 및 안전한 복사',()=>{
  for(const length of ['1800-2000','1800-1900','1900-2000'])for(const platform of ['tistory','naver','wordpress'])for(const tone of ['친근한 안내','차분한 설명','간결한 실무'])for(const keyword of ['가','가'.repeat(60),'자료정리','<img src=x onerror=x>']){
-  const o={...options,length,platform,tone,keyword};const d=core.demo(o);core.validate(d,o);assert.equal(d.tags.length,8);assert.equal(new Set(d.tags).size,8);assert.match(core.plain(d),/확인 필요/);assert.doesNotMatch(core.html(d),/<img/);
+  const o={...options,length,platform,tone,keyword};const d=core.demo(o);core.validate(d,o);assert.equal(d.tags.length,8);assert.equal(new Set(d.tags).size,8);assert.match(core.plain(d),/확인되지|확인하지/);assert.doesNotMatch(core.html(d),/<img/);
  }
  assert.throws(()=>core.demo({...options,keyword:' '}));assert.throws(()=>core.demo({...options,length:'9999'}));
 });
